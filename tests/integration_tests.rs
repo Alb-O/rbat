@@ -56,6 +56,8 @@ fn test_library_link_extraction() {
             type_sizes: std::collections::HashMap::new(),
         },
         blocks: vec![],
+        mmap: None,
+        file: None,
     };
 
     let links = blend_file.get_library_links();
@@ -108,19 +110,36 @@ fn test_block_filtering() {
                 data: vec![0; 150],
             },
         ],
+        mmap: None,
+        file: None,
     };
 
     let library_blocks = blend_file.get_library_blocks();
-    assert_eq!(library_blocks.len(), 1);
-    assert_eq!(&library_blocks[0].code[..2], b"LI");
+    match library_blocks {
+        Ok(blocks) => {
+            assert_eq!(blocks.len(), 1);
+            assert_eq!(&blocks[0].code[..2], b"LI");
+        },
+        Err(e) => panic!("Failed to get library blocks: {e:?}"),
+    }
 
     let image_blocks = blend_file.get_image_blocks();
-    assert_eq!(image_blocks.len(), 1);
-    assert_eq!(&image_blocks[0].code[..2], b"IM");
+    match image_blocks {
+        Ok(blocks) => {
+            assert_eq!(blocks.len(), 1);
+            assert_eq!(&blocks[0].code[..2], b"IM");
+        },
+        Err(e) => panic!("Failed to get image blocks: {e:?}"),
+    }
 
     let sound_blocks = blend_file.get_sound_blocks();
-    assert_eq!(sound_blocks.len(), 1);
-    assert_eq!(&sound_blocks[0].code[..2], b"SO");
+    match sound_blocks {
+        Ok(blocks) => {
+            assert_eq!(blocks.len(), 1);
+            assert_eq!(&blocks[0].code[..2], b"SO");
+        },
+        Err(e) => panic!("Failed to get sound blocks: {e:?}"),
+    }
 }
 
 #[test]

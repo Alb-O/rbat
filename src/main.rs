@@ -108,7 +108,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Commands::Blocks { file, filter } => {
             let blend_file = BlendFile::open(&file)?;
 
-            let blocks = match filter {
+            let blocks_result: Result<Vec<&blend_file_reader::block::Block>, _> = match filter {
                 Some(ref filter_type) => match filter_type.as_str() {
                     "library" => blend_file.get_library_blocks(),
                     "image" => blend_file.get_image_blocks(),
@@ -122,29 +122,37 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         return Ok(());
                     }
                 },
-                None => blend_file.blocks.iter().collect(),
+                None => Ok(blend_file.blocks.iter().collect()),
             };
 
-            if blocks.is_empty() {
-                println!("No blocks found");
-                return Ok(());
-            }
+            match blocks_result {
+                Ok(blocks) => {
+                    if blocks.is_empty() {
+                        println!("No blocks found");
+                        return Ok(());
+                    }
 
-            println!("Blocks in {file}:", file = file.display());
-            println!(
-                "{:<8} {:<10} {:<15} {:<10}",
-                "Code", "Size", "Address", "Count"
-            );
-            println!("{:-<8} {:-<10} {:-<15} {:-<10}", "", "", "", "");
+                    println!("Blocks in {file}:", file = file.display());
+                    println!(
+                        "{:<8} {:<10} {:<15} {:<10}",
+                        "Code", "Size", "Address", "Count"
+                    );
+                    println!("{:-<8} {:-<10} {:-<15} {:-<10}", "", "", "", "");
 
-            for block in blocks {
-                println!(
-                    "{:<8} {:<10} 0x{:<13x} {:<10}",
-                    String::from_utf8_lossy(&block.code),
-                    block.size,
-                    block.old_memory_address,
-                    block.count
-                );
+                    for block in blocks {
+                        println!(
+                            "{:<8} {:<10} 0x{:<13x} {:<10}",
+                            String::from_utf8_lossy(&block.code),
+                            block.size,
+                            block.old_memory_address,
+                            block.count
+                        );
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Error getting blocks: {e}");
+                    return Ok(());
+                }
             }
         }
 

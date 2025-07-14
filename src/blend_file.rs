@@ -3,8 +3,9 @@ use crate::dna::Dna;
 use crate::error::Result;
 use crate::header::Header;
 use crate::library_link::{LibraryLink, LibraryLinkExtractor};
-use memmap2::MmapOptions;
-use std::fs::File;
+use memmap2::{Mmap, MmapOptions};
+use std::fs::{File, OpenOptions};
+use std::io::{Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 #[derive(Debug)]
@@ -13,9 +14,12 @@ pub struct BlendFile {
     pub header: Header,
     pub dna: Dna,
     pub blocks: Vec<Block>,
+    pub mmap: Option<Mmap>,
+    pub file: Option<File>,
 }
 
 impl BlendFile {
+    /// Open a blend file in read-only mode
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
         let path = path.as_ref().to_path_buf();
         let file = File::open(&path)?;
@@ -26,50 +30,70 @@ impl BlendFile {
 
         // Parse header
         let header = Header::from_reader(&mut reader)?;
-        println!("DEBUG: Parsed header: {header:?}");
 
         // Parse all blocks
         let mut blocks = Vec::new();
         let block_iter = BlockIterator::new(&mut reader, &header);
 
-        let mut block_count = 0;
         for block_result in block_iter {
             match block_result {
-                Ok(block) => {
-                    block_count += 1;
-                    if block_count <= 5 {
-                        println!(
-                            "DEBUG: Block {block_count}: code={:?}, size={}",
-                            String::from_utf8_lossy(&block.code),
-                            block.size
-                        );
-                    }
-                    blocks.push(block);
-                }
-                Err(e) => {
-                    println!("DEBUG: Error reading block {block_count}: {e}");
-                    return Err(e);
-                }
+                Ok(block) => blocks.push(block),
+                Err(e) => return Err(e),
             }
         }
-        println!(
-            "DEBUG: Total blocks parsed: {blocks_len}",
-            blocks_len = blocks.len()
-        );
 
         // Parse DNA
         let mut reader = std::io::Cursor::new(&mmap);
         let dna = Dna::from_reader(&mut reader, &header)?;
-        println!("DEBUG: Parsed DNA");
 
         Ok(BlendFile {
             path,
             header,
             dna,
             blocks,
+            mmap: Some(mmap),
+            file: None,
         })
     }
 
+    /// Open a blend file in read+write mode for modification
+    pub fn open_read_write<P: AsRef<Path>>(path: P) -> Result<Self> {
+        let path = path.as_ref().to_path_buf();
+        let file = OpenOptions::new().read(true).write(true).open(&path)?;
+
+        // Memory map the file for efficient reading
+        let mmap = unsafe { MmapOptions::new().map(&file)? };
+        let mut reader = std::io::Cursor::new(&mmap);
+
+        // Parse header
+        let header = Header::from_reader(&mut reader)?;
+
+        // Parse all blocks
+        let mut blocks = Vec::new();
+        let block_iter = BlockIterator::new(&mut reader, &header);
+
+        for block_result in block_iter {
+            match block_result {
+                Ok(block) => blocks.push(block),
+                Err(e) => return Err(e),
+            }
+        }
+
+        // Parse DNA
+        let mut reader = std::io::Cursor::new(&mmap);
+        let dna = Dna::from_reader(&mut reader, &header)?;
+
+        Ok(BlendFile {
+            path,
+            header,
+            dna,
+            blocks,
+            mmap: Some(mmap),
+            file: Some(file),
+        })
+    }
+
+    /// Get library links from the blend file
     pub fn get_library_links(&self) -> Result<Vec<LibraryLink>> {
         let extractor = LibraryLinkExtractor::new(&self.path);
         let mut links = extractor.extract_links(&self.blocks, &self.dna)?;
@@ -77,41 +101,139 @@ impl BlendFile {
         Ok(links)
     }
 
-    pub fn get_blocks_by_type(&self, code: &[u8]) -> Vec<&Block> {
-        self.blocks
+    /// Get blocks by type code
+    pub fn get_blocks_by_type(&self, code: &[u8]) -> Result<Vec<&Block>> {
+        Ok(self
+            .blocks
             .iter()
             .filter(|b| &b.code[..code.len()] == code)
-            .collect()
+            .collect())
     }
 
-    pub fn get_library_blocks(&self) -> Vec<&Block> {
+    /// Get mutable blocks by type code
+    pub fn get_blocks_by_type_mut(&mut self, code: &[u8]) -> Result<Vec<&mut Block>> {
+        Ok(self
+            .blocks
+            .iter_mut()
+            .filter(|b| &b.code[..code.len()] == code)
+            .collect())
+    }
+
+    /// Get library blocks
+    pub fn get_library_blocks(&self) -> Result<Vec<&Block>> {
         self.get_blocks_by_type(b"LI")
     }
 
-    pub fn get_image_blocks(&self) -> Vec<&Block> {
+    /// Get mutable library blocks
+    pub fn get_library_blocks_mut(&mut self) -> Result<Vec<&mut Block>> {
+        self.get_blocks_by_type_mut(b"LI")
+    }
+
+    /// Get image blocks
+    pub fn get_image_blocks(&self) -> Result<Vec<&Block>> {
         self.get_blocks_by_type(b"IM")
     }
 
-    pub fn get_sound_blocks(&self) -> Vec<&Block> {
+    /// Get mutable image blocks
+    pub fn get_image_blocks_mut(&mut self) -> Result<Vec<&mut Block>> {
+        self.get_blocks_by_type_mut(b"IM")
+    }
+
+    /// Get sound blocks
+    pub fn get_sound_blocks(&self) -> Result<Vec<&Block>> {
         self.get_blocks_by_type(b"SO")
     }
 
-    pub fn get_movie_clip_blocks(&self) -> Vec<&Block> {
+    /// Get mutable sound blocks
+    pub fn get_sound_blocks_mut(&mut self) -> Result<Vec<&mut Block>> {
+        self.get_blocks_by_type_mut(b"SO")
+    }
+
+    /// Get movie clip blocks
+    pub fn get_movie_clip_blocks(&self) -> Result<Vec<&Block>> {
         self.get_blocks_by_type(b"MC")
     }
 
-    pub fn get_mesh_blocks(&self) -> Vec<&Block> {
+    /// Get mutable movie clip blocks
+    pub fn get_movie_clip_blocks_mut(&mut self) -> Result<Vec<&mut Block>> {
+        self.get_blocks_by_type_mut(b"MC")
+    }
+
+    /// Get mesh blocks
+    pub fn get_mesh_blocks(&self) -> Result<Vec<&Block>> {
         self.get_blocks_by_type(b"ME")
     }
 
-    pub fn get_material_blocks(&self) -> Vec<&Block> {
+    /// Get mutable mesh blocks
+    pub fn get_mesh_blocks_mut(&mut self) -> Result<Vec<&mut Block>> {
+        self.get_blocks_by_type_mut(b"ME")
+    }
+
+    /// Get material blocks
+    pub fn get_material_blocks(&self) -> Result<Vec<&Block>> {
         self.get_blocks_by_type(b"MA")
     }
 
-    pub fn get_texture_blocks(&self) -> Vec<&Block> {
+    /// Get mutable material blocks
+    pub fn get_material_blocks_mut(&mut self) -> Result<Vec<&mut Block>> {
+        self.get_blocks_by_type_mut(b"MA")
+    }
+
+    /// Get texture blocks
+    pub fn get_texture_blocks(&self) -> Result<Vec<&Block>> {
         self.get_blocks_by_type(b"TE")
     }
 
+    /// Get mutable texture blocks
+    pub fn get_texture_blocks_mut(&mut self) -> Result<Vec<&mut Block>> {
+        self.get_blocks_by_type_mut(b"TE")
+    }
+
+    /// Write changes back to the file
+    pub fn save(&mut self) -> Result<()> {
+        if let Some(ref mut file) = self.file {
+            // We need to reconstruct the file with our modified blocks
+            // For now, this is a simplified implementation that rewrites the entire file
+            let mut writer = std::io::Cursor::new(Vec::new());
+
+            // Write header
+            self.header.write_to_writer(&mut writer)?;
+
+            // Write all blocks
+            for block in &self.blocks {
+                block.write_to_writer(&mut writer, &self.header)?;
+            }
+
+            // Write DNA
+            self.dna.write_to_writer(&mut writer)?;
+
+            // Write the data back to the file
+            file.set_len(0)?;
+            file.seek(SeekFrom::Start(0))?;
+            file.write_all(&writer.into_inner())?;
+
+            Ok(())
+        } else {
+            Err(
+                std::io::Error::new(std::io::ErrorKind::Other, "File not opened in write mode")
+                    .into(),
+            )
+        }
+    }
+
+    /// Close the file and release resources
+    pub fn close(&mut self) {
+        self.mmap = None;
+        self.file = None;
+    }
+
+    /// Check if the file is compressed (placeholder for now)
+    pub fn is_compressed(&self) -> bool {
+        // TODO: Implement compression detection
+        false
+    }
+
+    /// Print a summary of the blend file
     pub fn print_summary(&self) {
         println!("Blend File: {}", self.path.display());
         println!("Version: {version}", version = self.header.version);
@@ -196,18 +318,30 @@ mod tests {
                     old_memory_address: 0x2000,
                     sdna_index: 1,
                     count: 1,
-                    data_offset: 300,
+                    data_offset: 200,
                     data: vec![0; 200],
                 },
             ],
+            mmap: None,
+            file: None,
         };
 
         let library_blocks = blend_file.get_library_blocks();
-        assert_eq!(library_blocks.len(), 1);
-        assert_eq!(&library_blocks[0].code[..2], b"LI");
+        match library_blocks {
+            Ok(blocks) => {
+                assert_eq!(blocks.len(), 1);
+                assert_eq!(&blocks[0].code[..2], b"LI");
+            }
+            Err(e) => panic!("Failed to get library blocks: {:?}", e),
+        }
 
         let image_blocks = blend_file.get_image_blocks();
-        assert_eq!(image_blocks.len(), 1);
-        assert_eq!(&image_blocks[0].code[..2], b"IM");
+        match image_blocks {
+            Ok(blocks) => {
+                assert_eq!(blocks.len(), 1);
+                assert_eq!(&blocks[0].code[..2], b"IM");
+            }
+            Err(e) => panic!("Failed to get image blocks: {:?}", e),
+        }
     }
 }

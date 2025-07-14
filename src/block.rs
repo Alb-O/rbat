@@ -1,6 +1,6 @@
 use crate::error::Result;
 use crate::header::{Endianness, Header};
-use byteorder::{LittleEndian, ReadBytesExt};
+use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use std::io::{Read, Seek};
 
 #[derive(Debug, Clone)]
@@ -96,6 +96,117 @@ impl Block {
 
     pub fn get_type_name(&self) -> String {
         String::from_utf8_lossy(&self.code).into_owned()
+    }
+
+    pub fn get_string_field(&self, field_name: &str) -> Result<String> {
+        // This is a simplified implementation - in a real scenario, you'd use DNA info
+        // For now, we'll search for null-terminated strings in the data
+        let null_pos = self
+            .data
+            .iter()
+            .position(|&b| b == 0)
+            .unwrap_or(self.data.len());
+        let string_data = &self.data[..null_pos];
+        Ok(String::from_utf8_lossy(string_data).into_owned())
+    }
+
+    pub fn set_string_field(&mut self, field_name: &str, value: &str) -> Result<()> {
+        // This is a simplified implementation - in a real scenario, you'd use DNA info
+        let bytes = value.as_bytes();
+        let len = bytes.len().min(self.data.len());
+
+        // Copy the string bytes
+        self.data[..len].copy_from_slice(&bytes[..len]);
+
+        // Null-terminate if there's space
+        if len < self.data.len() {
+            self.data[len] = 0;
+        }
+
+        Ok(())
+    }
+
+    pub fn get_float_array_field(&self, field_name: &str, count: usize) -> Result<Vec<f32>> {
+        // This is a simplified implementation - in a real scenario, you'd use DNA info
+        let mut result = Vec::with_capacity(count);
+
+        for i in 0..count {
+            if i * 4 + 4 <= self.data.len() {
+                let bytes = &self.data[i * 4..i * 4 + 4];
+                let value = f32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
+                result.push(value);
+            } else {
+                result.push(0.0);
+            }
+        }
+
+        Ok(result)
+    }
+
+    pub fn set_float_array_field(&mut self, field_name: &str, values: &[f32]) -> Result<()> {
+        // This is a simplified implementation - in a real scenario, you'd use DNA info
+        for (i, &value) in values.iter().enumerate() {
+            let start = i * 4;
+            let end = start + 4;
+
+            if end <= self.data.len() {
+                let bytes = value.to_le_bytes();
+                self.data[start..end].copy_from_slice(&bytes);
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn write_to_writer<W: std::io::Write>(
+        &self,
+        writer: &mut W,
+        header: &crate::header::Header,
+    ) -> Result<()> {
+        use byteorder::{LittleEndian, WriteBytesExt};
+
+        // Write block code
+        writer.write_all(&self.code)?;
+
+        // Write size
+        match header.endianness {
+            Endianness::Little => writer.write_u32::<LittleEndian>(self.size)?,
+            Endianness::Big => writer.write_u32::<byteorder::BigEndian>(self.size)?,
+        }
+
+        // Write old memory address
+        match header.pointer_size {
+            crate::header::PointerSize::Bits32 => {
+                let addr = self.old_memory_address as u32;
+                match header.endianness {
+                    Endianness::Little => writer.write_u32::<LittleEndian>(addr)?,
+                    Endianness::Big => writer.write_u32::<byteorder::BigEndian>(addr)?,
+                }
+            }
+            crate::header::PointerSize::Bits64 => match header.endianness {
+                Endianness::Little => writer.write_u64::<LittleEndian>(self.old_memory_address)?,
+                Endianness::Big => {
+                    writer.write_u64::<byteorder::BigEndian>(self.old_memory_address)?
+                }
+            },
+        }
+
+        // Write SDNA index
+        match header.endianness {
+            Endianness::Little => writer.write_u32::<LittleEndian>(self.sdna_index)?,
+            Endianness::Big => writer.write_u32::<byteorder::BigEndian>(self.sdna_index)?,
+        }
+
+        // Write count
+        match header.endianness {
+            Endianness::Little => writer.write_u32::<LittleEndian>(self.count)?,
+            Endianness::Big => writer.write_u32::<byteorder::BigEndian>(self.count)?,
+        }
+
+        // Write data
+        writer.write_all(&self.data)?;
+
+        Ok(())
     }
 }
 

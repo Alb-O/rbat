@@ -77,6 +77,12 @@ impl Dna {
     pub fn get_type_size(&self, type_name: &str) -> Option<usize> {
         self.type_sizes.get(type_name).copied()
     }
+
+    pub fn write_to_writer<W: std::io::Write>(&self, _writer: &mut W) -> Result<()> {
+        // For now, this is a no-op since we don't actually parse the DNA structure
+        // In a real implementation, we would write the DNA1 block back to the file
+        Ok(())
+    }
 }
 
 #[cfg(test)]

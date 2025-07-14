@@ -7,6 +7,15 @@ pub enum PointerSize {
     Bits64,
 }
 
+impl PointerSize {
+    pub fn bytes(&self) -> usize {
+        match self {
+            PointerSize::Bits32 => 4,
+            PointerSize::Bits64 => 8,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Endianness {
     Little,
@@ -75,6 +84,27 @@ impl Header {
             endianness,
             version,
         })
+    }
+
+    pub fn write_to_writer<W: std::io::Write>(&self, writer: &mut W) -> Result<()> {
+        writer.write_all(&self.magic)?;
+
+        let pointer_size_byte = match self.pointer_size {
+            PointerSize::Bits32 => b'_',
+            PointerSize::Bits64 => b'-',
+        };
+        writer.write_all(&[pointer_size_byte])?;
+
+        let endianness_byte = match self.endianness {
+            Endianness::Little => b'v',
+            Endianness::Big => b'V',
+        };
+        writer.write_all(&[endianness_byte])?;
+
+        let version_str = format!("{:03}", self.version);
+        writer.write_all(version_str.as_bytes())?;
+
+        Ok(())
     }
 }
 
