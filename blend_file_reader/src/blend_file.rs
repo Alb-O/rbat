@@ -3,10 +3,12 @@ use crate::dna::Dna;
 use crate::error::Result;
 use crate::header::Header;
 use crate::library_link::{LibraryLink, LibraryLinkExtractor};
-use memmap2::{Mmap, MmapOptions};
+use flate2::read::{GzDecoder, ZlibDecoder};
+use memmap2::Mmap;
 use std::fs::{File, OpenOptions};
-use std::io::{Seek, SeekFrom, Write};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
+use zstd::stream::read::Decoder as ZstdDecoder;
 
 #[derive(Debug)]
 pub struct BlendFile {
@@ -19,14 +21,43 @@ pub struct BlendFile {
 }
 
 impl BlendFile {
+    /// Detects compression type and returns decompressed data if needed
+    fn decompress_if_needed<P: AsRef<Path>>(path: P) -> Result<Vec<u8>> {
+        let mut file = File::open(&path)?;
+        let mut magic = [0u8; 4];
+        file.read_exact(&mut magic)?;
+        file.seek(SeekFrom::Start(0))?;
+        // Zlib: 0x78 0x9C or 0x78 0x01 or 0x78 0xDA
+        // Zstd: 0x28 0xB5 0x2F 0xFD
+        // Gzip: 0x1f 0x8b 0x08 0x00
+        if magic[..2] == [0x78, 0x9C] || magic[..2] == [0x78, 0x01] || magic[..2] == [0x78, 0xDA] {
+            let mut decoder = ZlibDecoder::new(file);
+            let mut decompressed = Vec::new();
+            decoder.read_to_end(&mut decompressed)?;
+            Ok(decompressed)
+        } else if magic == [0x28, 0xB5, 0x2F, 0xFD] {
+            let mut decoder = ZstdDecoder::new(file)?;
+            let mut decompressed = Vec::new();
+            decoder.read_to_end(&mut decompressed)?;
+            Ok(decompressed)
+        } else if magic == [0x1f, 0x8b, 0x08, 0x00] {
+            let mut decoder = GzDecoder::new(file);
+            let mut decompressed = Vec::new();
+            decoder.read_to_end(&mut decompressed)?;
+            Ok(decompressed)
+        } else {
+            // Not compressed
+            let mut data = Vec::new();
+            file.read_to_end(&mut data)?;
+            Ok(data)
+        }
+    }
+
     /// Open a blend file in read-only mode
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
         let path = path.as_ref().to_path_buf();
-        let file = File::open(&path)?;
-
-        // Memory map the file for efficient reading
-        let mmap = unsafe { MmapOptions::new().map(&file)? };
-        let mut reader = std::io::Cursor::new(&mmap);
+        let data = Self::decompress_if_needed(&path)?;
+        let mut reader = std::io::Cursor::new(&data);
 
         // Parse header
         let header = Header::from_reader(&mut reader)?;
@@ -43,7 +74,7 @@ impl BlendFile {
         }
 
         // Parse DNA
-        let mut reader = std::io::Cursor::new(&mmap);
+        let mut reader = std::io::Cursor::new(&data);
         let dna = Dna::from_reader(&mut reader, &header)?;
 
         Ok(BlendFile {
@@ -51,7 +82,7 @@ impl BlendFile {
             header,
             dna,
             blocks,
-            mmap: Some(mmap),
+            mmap: None,
             file: None,
         })
     }
@@ -59,11 +90,9 @@ impl BlendFile {
     /// Open a blend file in read+write mode for modification
     pub fn open_read_write<P: AsRef<Path>>(path: P) -> Result<Self> {
         let path = path.as_ref().to_path_buf();
+        let data = Self::decompress_if_needed(&path)?;
         let file = OpenOptions::new().read(true).write(true).open(&path)?;
-
-        // Memory map the file for efficient reading
-        let mmap = unsafe { MmapOptions::new().map(&file)? };
-        let mut reader = std::io::Cursor::new(&mmap);
+        let mut reader = std::io::Cursor::new(&data);
 
         // Parse header
         let header = Header::from_reader(&mut reader)?;
@@ -80,7 +109,7 @@ impl BlendFile {
         }
 
         // Parse DNA
-        let mut reader = std::io::Cursor::new(&mmap);
+        let mut reader = std::io::Cursor::new(&data);
         let dna = Dna::from_reader(&mut reader, &header)?;
 
         Ok(BlendFile {
@@ -88,7 +117,7 @@ impl BlendFile {
             header,
             dna,
             blocks,
-            mmap: Some(mmap),
+            mmap: None,
             file: Some(file),
         })
     }

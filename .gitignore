@@ -1,3 +1,3 @@
 target/
 tmp/
-/tests/test_blend_files/
+**/test_blend_files/

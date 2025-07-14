@@ -119,7 +119,7 @@ fn test_block_filtering() {
         Ok(blocks) => {
             assert_eq!(blocks.len(), 1);
             assert_eq!(&blocks[0].code[..2], b"LI");
-        },
+        }
         Err(e) => panic!("Failed to get library blocks: {e:?}"),
     }
 
@@ -128,7 +128,7 @@ fn test_block_filtering() {
         Ok(blocks) => {
             assert_eq!(blocks.len(), 1);
             assert_eq!(&blocks[0].code[..2], b"IM");
-        },
+        }
         Err(e) => panic!("Failed to get image blocks: {e:?}"),
     }
 
@@ -137,7 +137,7 @@ fn test_block_filtering() {
         Ok(blocks) => {
             assert_eq!(blocks.len(), 1);
             assert_eq!(&blocks[0].code[..2], b"SO");
-        },
+        }
         Err(e) => panic!("Failed to get sound blocks: {e:?}"),
     }
 }
