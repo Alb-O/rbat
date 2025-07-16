@@ -1,6 +1,2 @@
 [workspace]
-members = [
-    "blend_file_reader",
-    "wherego"
-]
-
+members = ["blend_file_reader"]

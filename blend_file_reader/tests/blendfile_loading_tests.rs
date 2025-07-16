@@ -5,7 +5,7 @@
 mod tests {
     use blend_file_reader::dna::{DnaField, DnaStruct};
     use blend_file_reader::BlendFile;
-    use std::collections::HashMap;
+    
 
     fn inject_stub_dna_object_struct(blend_file: &mut BlendFile) {
         // Stub DNA struct for Object with loc field at offset 488
@@ -71,7 +71,7 @@ mod tests {
         let ob_blocks = blend_file.get_blocks_by_type(b"OB");
         match ob_blocks {
             Ok(blocks) => {
-                let ob_block = blocks.get(0).expect("No OB block found");
+                let ob_block = blocks.first().expect("No OB block found");
                 // Check type name
                 let type_name = ob_block.get_type_name();
                 assert!(type_name.starts_with("OB"));
@@ -104,14 +104,14 @@ mod tests {
         // Debug: print all DNA struct names
         println!("Available DNA structs:");
         for name in blend_file.dna.structs.keys() {
-            println!("  {}", name);
+            println!("  {name}");
         }
 
         // Find first OB block
         let ob_blocks = blend_file.get_blocks_by_type(b"OB");
         match ob_blocks {
             Ok(ref blocks) => {
-                let ob_block = blocks.get(0).expect("No OB block found");
+                let ob_block = blocks.first().expect("No OB block found");
                 // Debug: print first 32 bytes of OB block data before assertion
                 println!(
                     "OB block data (first 32 bytes): {:?}",

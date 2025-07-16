@@ -12,7 +12,7 @@ fn main() {
     match ob_blocks {
         Ok(blocks) => {
             for (i, block) in blocks.iter().enumerate() {
-                println!("OB Block {}:", i);
+                println!("OB Block {i}:");
                 println!("  Size: {} bytes", block.size);
                 println!("  Data offset: {}", block.data_offset);
                 println!("  SDNA index: {}", block.sdna_index);
@@ -33,7 +33,7 @@ fn main() {
                         let bytes = [chunk[0], chunk[1], chunk[2], chunk[3]];
                         floats.push(f32::from_le_bytes(bytes));
                     }
-                    println!("  First 3 floats: {:?}", floats);
+                    println!("  First 3 floats: {floats:?}");
                 }
             }
         }
@@ -44,6 +44,6 @@ fn main() {
 
     println!("\n=== Available DNA Structs ===");
     for name in blend_file.dna.structs.keys() {
-        println!("  {}", name);
+        println!("  {name}");
     }
 }

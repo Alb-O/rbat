@@ -1,7 +1,6 @@
 // Rust port of test_bpathlib.py
 // Tests for blend path logic, relative/absolute path handling, and root stripping
 
-use std::fs;
 use std::path::{Path, PathBuf};
 
 // If you have a BlendPath type, import it here
@@ -34,7 +33,7 @@ mod tests {
     #[test]
     fn test_repr() {
         let p = PathBuf::from("//some/file.blend");
-        assert_eq!(format!("{:?}", p), "\"//some/file.blend\"");
+        assert_eq!(format!("{p:?}"), "\"//some/file.blend\"");
     }
 
     #[test]

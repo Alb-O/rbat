@@ -1,6 +1,5 @@
 use blend_file_reader::*;
 use std::fs;
-use std::path::Path;
 
 #[cfg(test)]
 mod tests {
@@ -69,7 +68,7 @@ mod tests {
         let original_hash = blend_file
             .blocks
             .iter()
-            .map(|b| b.code.clone())
+            .map(|b| b.code)
             .collect::<Vec<_>>();
 
         // Find a library block and modify it
@@ -91,7 +90,7 @@ mod tests {
         let new_hash = reopened_file
             .blocks
             .iter()
-            .map(|b| b.code.clone())
+            .map(|b| b.code)
             .collect::<Vec<_>>();
 
         // The block structure should be the same

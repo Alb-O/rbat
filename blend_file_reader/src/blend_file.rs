@@ -244,7 +244,7 @@ impl BlendFile {
             Ok(())
         } else {
             Err(
-                std::io::Error::new(std::io::ErrorKind::Other, "File not opened in write mode")
+                std::io::Error::other("File not opened in write mode")
                     .into(),
             )
         }
@@ -361,7 +361,7 @@ mod tests {
                 assert_eq!(blocks.len(), 1);
                 assert_eq!(&blocks[0].code[..2], b"LI");
             }
-            Err(e) => panic!("Failed to get library blocks: {:?}", e),
+            Err(e) => panic!("Failed to get library blocks: {e:?}"),
         }
 
         let image_blocks = blend_file.get_image_blocks();
@@ -370,7 +370,7 @@ mod tests {
                 assert_eq!(blocks.len(), 1);
                 assert_eq!(&blocks[0].code[..2], b"IM");
             }
-            Err(e) => panic!("Failed to get image blocks: {:?}", e),
+            Err(e) => panic!("Failed to get image blocks: {e:?}"),
         }
     }
 }

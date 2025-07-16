@@ -7,7 +7,7 @@ fn main() {
     let ob_blocks = blend_file.get_blocks_by_type(b"OB");
     match ob_blocks {
         Ok(blocks) => {
-            let ob_block = blocks.get(0).expect("No OB block found");
+            let ob_block = blocks.first().expect("No OB block found");
 
             println!("OB Block size: {} bytes", ob_block.size);
 
@@ -33,7 +33,7 @@ fn main() {
                 }
 
                 if found {
-                    println!("Found location [2.0, 3.0, 5.0] at offset {}", i);
+                    println!("Found location [2.0, 3.0, 5.0] at offset {i}");
 
                     // Print some context around this location
                     let start = i.saturating_sub(16);
@@ -55,7 +55,7 @@ fn main() {
                                 ob_block.data[k + 3],
                             ];
                             let value = f32::from_le_bytes(bytes);
-                            print!("{:.2}, ", value);
+                            print!("{value:.2}, ");
                         }
                     }
                     println!("]");
@@ -75,7 +75,7 @@ fn main() {
                     ];
                     let value = f32::from_le_bytes(bytes);
                     if value.abs() > 0.001 {
-                        println!("Offset {}: {:.3}", i, value);
+                        println!("Offset {i}: {value:.3}");
                     }
                 }
             }
